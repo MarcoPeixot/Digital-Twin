@@ -1,0 +1,81 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL") // A URL virá do Docker
+}
+
+// Modelo para o Usuário
+model User {
+  id        String    @id @default(cuid())
+  cpf       String    @unique // CPF é único
+  email     String    @unique // Email é único
+  name      String
+  password  String // A senha será armazenada como um hash
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  
+  // Relação: Um usuário tem uma conta
+  account   Account?
+
+  auditLogs AuditLog[] // Um usuário pode ter vários registros de auditoria
+
+}
+
+// Modelo para a Conta Bancária
+model Account {
+  id        String   @id @default(cuid())
+  balance   Float    @default(0) // Saldo inicial é 0
+  userId    String   @unique // Cada conta pertence a um único usuário
+  user      User     @relation(fields: [userId], references: [id])
+  
+  // Relação: Uma conta pode ter várias transações
+  transactionsSent     Transaction[] @relation("SentTransactions")
+  transactionsReceived Transaction[] @relation("ReceivedTransactions")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// Modelo para Transações (Extrato/PIX)
+model Transaction {
+  id          String   @id @default(cuid())
+  amount      Float
+  description String?
+  
+  senderAccountId String
+  senderAccount   Account  @relation("SentTransactions", fields: [senderAccountId], references: [id])
+  
+  receiverAccountId String
+  receiverAccount   Account  @relation("ReceivedTransactions", fields: [receiverAccountId], references: [id])
+
+  createdAt   DateTime @default(now())
+
+  // Adiciona índices nas colunas que serão frequentemente buscadas
+  @@index([senderAccountId])
+  @@index([receiverAccountId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  timestamp DateTime @default(now())
+  
+  // Quem fez a ação? (Opcional para ações do sistema)
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  
+  // O que foi feito?
+  action    String   // Ex: "PIX_TRANSFER_SUCCESS", "LOGIN_FAILURE", "BALANCE_CHECK"
+  
+  // Em qual entidade a ação ocorreu?
+  entity    String   // Ex: "Transaction", "Account"
+  entityId  String   // ID do registro afetado
+  
+  // Detalhes extras sobre o evento em formato JSON
+  details   Json
+}
